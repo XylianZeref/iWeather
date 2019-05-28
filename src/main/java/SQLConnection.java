@@ -10,7 +10,7 @@ public final class SQLConnection {
      */
 
 
-    private final static String database = "restaurant";
+    private final static String database = "iWeather";
     private final static String user = "public";
     private final static String pwd = "public";
     private final static String serverAddress = "auth.xylian.org";
@@ -60,7 +60,7 @@ public final class SQLConnection {
                 stmt = conn.createStatement();
                 return stmt.executeQuery(qry);
 
-            }catch(Exception e){
+            } catch(Exception e){
                 e.printStackTrace();
                 return null;
             }
@@ -80,12 +80,13 @@ public final class SQLConnection {
 
         executorService.execute(() -> {
 
-            try{
+            try {
                 Statement stmt = conn.createStatement();
                 stmt.executeUpdate(qry);
                 stmt.close();
-            }catch(Exception e){
+            } catch(Exception e){
                 e.printStackTrace();
+                System.exit(-1);
             }
         });
     }
@@ -106,7 +107,7 @@ public final class SQLConnection {
 
     public static void shutdown() {
         close();
-        executorService.shutdownNow();
+        executorService.shutdown();
     }
 
     public static boolean isConnected(){

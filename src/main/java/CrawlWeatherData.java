@@ -1,52 +1,90 @@
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
 import java.io.*;
-import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Collection;
 
 public class CrawlWeatherData {
     public static final String API_KEY_OPEN_WEATHER_MAP = "0748fd70f9msh3ed6f2f69059c2ap196176jsndaf369ea7081";
 
     public static void main(String[] args) {
-        jsonFileToDB();
-
-        // DB
+        // DB init
         SQLConnection.init();
+
         ResultSet a = SQLConnection.query("SHOW DATABASES");
-        SQLConnection.close();
         try {
             while(a.next()) {
                 System.out.println(a.getString("Database"));
+            }
+            System.out.print("\n");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        String geo_city;
+        double geo_lat, geo_lon;
+
+        // crawl weather data: Open Weather Map
+        String[][] headers = {
+                {"X-RapidAPI-Host", "community-open-weather-map.p.rapidapi.com"},
+                {"X-RapidAPI-Key", API_KEY_OPEN_WEATHER_MAP}
+        };
+
+        ResultSet device_rs = SQLConnection.query("SELECT ID, lon, lat FROM device");
+        Gson gson = new Gson();
+        try {
+            while(device_rs.next()) {
+                System.out.println("crawling..");
+
+                //geo_city = "Hanover";
+                geo_lat = device_rs.getDouble("lat");
+                geo_lon = device_rs.getDouble("lon");
+
+                String response = executeHttpRequest("https://community-open-weather-map.p.rapidapi.com/weather",
+                        "&lat="+geo_lat
+                                + "&lon="+geo_lon
+                                + "&units=metric"
+                                + "&mode=json",
+                                //+ "&q="+geo_city,
+                        "GET", headers);
+                System.out.println(response);
+
+                WeatherData weatherData = gson.fromJson(response, WeatherData.class);
+                insertWeatherData(headers[0][1], geo_lon, geo_lat, weatherData.main.temp, weatherData.main.pressure, weatherData.main.humidity);
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
-        String geo_city = "Hanover";
-        String geo_lat = "";
-        String geo_lon = "";
-
-        // crawl weather data: Open Weather Map
-        String[][] headers = { {"X-RapidAPI-Host", "community-open-weather-map.p.rapidapi.com"},
-                    {"X-RapidAPI-Key", API_KEY_OPEN_WEATHER_MAP} };
-
-        String response = executeHttpRequest("https://community-open-weather-map.p.rapidapi.com/weather",
-                "&lat="+geo_lat
-                        + "&lon="+geo_lon
-                        + "&units=metric"
-                        + "&mode=json"
-                        + "&q="+geo_city,
-                "GET", headers);
-        System.out.println(response);
-
         SQLConnection.shutdown();
+    }
+
+    private class WeatherData {
+        Main main;
+
+        WeatherData(Main main) {
+            this.main = main;
+        }
+
+        class Main {
+            double temp, pressure, humidity;
+
+            Main(double temp, double pressure, double humidity) {
+                this.temp = temp;
+                this.pressure = pressure;
+                this.humidity = humidity;
+            }
+        }
+    }
+
+    private static void insertWeatherData(String source_address, double lon, double lat, double temp, double pressure, double humidity) {
+        String sql = "INSERT INTO `weather`(`source_typ`, `source_address`, `lon`, `lat`, `temp`, `pressure`, `humidity`) "
+                + "VALUES ("+ 1 +",'"+source_address+"','"+lon+"','"+lat+"',"
+                + "'"+temp+"','"+pressure+"','"+humidity+"');";
+        System.out.println("insertWeatherData(): " + sql);
+        SQLConnection.update(sql);
     }
 
     public static String executeHttpRequest(String targetURL, String urlParameters, String method, String[][] headers) {
@@ -112,42 +150,4 @@ public class CrawlWeatherData {
 
     }
 
-    private class Coord {
-        double lon, lat;
-        Coord(double lon, double lat) {
-            this.lon = lon;
-            this.lat = lat;
-        }
-    }
-
-    private class Geo {
-        public int id;
-        public String name, country;
-        public Coord coord;
-
-        public Geo(int id, String name, String country, Coord coord) {
-            this.id = id;
-            this.name = name;
-            this.country = country;
-            this.coord = coord;
-        }
-    }
-
-    public static void jsonFileToDB() {
-        String filePath = "C:\\Users\\Xylian\\Pictures\\city.list.json";
-        try {
-            String content = new String(Files.readAllBytes(Paths.get(filePath)));
-
-            Gson gson = new Gson();
-
-            Geo[] datasets = gson.fromJson(content, Geo[].class);
-
-            for (Geo dataset : datasets) {
-                System.out.println(dataset.coord.lat);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }
 }
